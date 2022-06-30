@@ -1,4 +1,4 @@
-# `omop2fhir-codesystem`
+# OMOP Vocab on FHIR
 OMOP2FHIR converter specifically for CodeSystems.
 
 ## How it works
@@ -29,33 +29,80 @@ about the concepts and relationship properties. That is, every field  that OMOP
 provides becomes JSON serialiazed into these concept definition and property 
 description fields.
 
-##### Standard variation ( -- TODO -- )
-Example concept:
-```json
-
-```
-
+##### Standard variation
 Example concept relationship property:
 ```json
+{"code": "Has specimen proc", "type": "code"}
+```
 
+Example concept:
+```json
+{
+  "code": 756331,
+  "display": "procedure_occurrence.procedure_type_concept_id",
+  "property": [
+    {
+      "code": "Contained in version",
+      "valueCode": 756265
+    },
+    {
+      "code": "Is a",
+      "valueCode": 1147301
+    },
+    {
+      "code": "Mapped from",
+      "valueCode": 756331
+    },
+    {
+      "code": "Maps to",
+      "valueCode": 756331
+    }
+  ]
+}
 ```
 
 ##### Extended variation
-Example concept:
+Example concept relationship property (includes `description`):
 ```json
-
+{
+  "code": "Has specimen proc",
+  "type": "code",
+  "description": "{\"relationship_id\": \"Has specimen proc\", \"relationship_name\": \"Has specimen procedure (SNOMED)\", \"is_hierarchical\": 0, \"defines_ancestry\": 0, \"reverse_relationship_id\": \"Specimen proc of\", \"relationship_concept_id\": 44818775}"
+}
 ```
 
-Example concept relationship property:
+Example concept (includes `definition`):
 ```json
-
+{
+  "code": 756331,
+  "display": "procedure_occurrence.procedure_type_concept_id",
+  "definition": "{\"concept_id\": 756331, \"concept_name\": \"procedure_occurrence.procedure_type_concept_id\", \"domain_id\": \"Metadata\", \"vocabulary_id\": \"CDM\", \"concept_class_id\": \"Field\", \"standard_concept\": \"S\", \"concept_code\": \"CDM1016\", \"valid_start_date\": 20210925, \"valid_end_date\": 20991231, \"invalid_reason\": \"\"}",
+  "property": [
+    {
+      "code": "Contained in version",
+      "valueCode": 756265
+    },
+    {
+      "code": "Is a",
+      "valueCode": 1147301
+    },
+    {
+      "code": "Mapped from",
+      "valueCode": 756331
+    },
+    {
+      "code": "Maps to",
+      "valueCode": 756331
+    }
+  ]
+}
 ```
 
 ## Usage
 You can use this package by cloning this repository and running the CLI (Command
 Line Interface) from the cloned directory.
 
-Run: `python -m omop2fhir_codesystems <PARAMS>`
+Run: `python -m omop_vocab_on_fhir <PARAMS>`
 
 CLI Params
 |Short flag | Long flag | Choices | Default | Description |

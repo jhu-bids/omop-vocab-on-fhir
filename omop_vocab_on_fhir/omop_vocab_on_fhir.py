@@ -4,6 +4,8 @@ TODO's
   - time how long it takes
   - add option to dump json for concept.definition and property.description
   - What if it can't find version and version isn't passed?
+  - Add --all-single-codesystem
+  - Add --all-codesystems (if no -f, do all formats, else just that format)
 Later areas for improvement
   1. Accept params from CLI
   2. Pre-bake common vocabularies, such as RxNorm. (what else is available and useful in OMOP?)
@@ -60,11 +62,19 @@ def _gen_json(
     server_url = server_url if server_url.endswith('/') else server_url + '/'
     codesystem_url = server_url if server_url.endswith('CodeSystem') else server_url + 'CodeSystem/'
     outpath = os.path.join(out_dir, f'{codesystem_name}-{codesystem_version}.json')
+    if out_format == 'fhir-json-extended':
+        outpath = outpath.replace('.json', '-extended.json')
     # todo: later: handle: DtypeWarning: Columns (6,9) have mixed types. Specify dtype option on import or set
     #  low_memory=False. concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep)
-    relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
-    concept_relationship_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT_RELATIONSHIP.csv'), sep=sep).fillna('')
-    concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep).fillna('')
+    try:
+        relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
+        concept_relationship_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT_RELATIONSHIP.csv'), sep=sep).fillna('')
+        concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep).fillna('')
+    except FileNotFoundError:
+        in_dir = os.path.join(in_dir, codesystem_name)
+        relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
+        concept_relationship_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT_RELATIONSHIP.csv'), sep=sep).fillna('')
+        concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep).fillna('')
 
     # 1. Construct top level CodeSystem JSON (excluding concept/ tree field)
     d = {  # todo: Is this thorough enough?
@@ -103,7 +113,7 @@ def _gen_json(
             # "uri": "",  # todo?
         }
         if out_format == 'fhir-json-extended':
-            d["description"] = json.dumps(dict(row))  # are there better descriptions avail?
+            prop["description"] = json.dumps(dict(row))  # are there better descriptions avail?
         d["property"].append(prop)
 
     # 3. Parse: CONCEPT.csv: put in CodeSystem.concept
@@ -125,6 +135,7 @@ def _gen_json(
         # todo: definition: not a better definition? or use a subset of these fields?
         if out_format == 'fhir-json-extended':
             concept["definition"] = json.dumps(dict(row))
+        # TODO temp
         concept_dict[row['concept_id']] = concept
 
     # 4. Parse: CONCEPT_RELATIONSHIP.csv: put in CodeSystem.concept
@@ -150,10 +161,17 @@ def _gen_hapi_csv(
 ) -> Dict[str, pd.DataFrame]:
     """Create custom HAPI FHIR CodeSystem CSV."""
     #  ...i don't want IDE to show error for unused var here. Better solution avail?
-    omop_concepts_path = os.path.join(in_dir, 'CONCEPT.csv')
-    omop_hierarchy_path = os.path.join(in_dir, 'CONCEPT_ANCESTOR.csv')
-    omop_concepts_df = pd.read_csv(omop_concepts_path, sep='\t')
-    omop_hierarchy_df = pd.read_csv(omop_hierarchy_path, sep='\t')
+    try:
+        omop_concepts_path = os.path.join(in_dir, 'CONCEPT.csv')
+        omop_hierarchy_path = os.path.join(in_dir, 'CONCEPT_ANCESTOR.csv')
+        omop_concepts_df = pd.read_csv(omop_concepts_path, sep='\t')
+        omop_hierarchy_df = pd.read_csv(omop_hierarchy_path, sep='\t')
+    except FileNotFoundError:
+        in_dir = os.path.join(in_dir, codesystem_name)
+        omop_concepts_path = os.path.join(in_dir, 'CONCEPT.csv')
+        omop_hierarchy_path = os.path.join(in_dir, 'CONCEPT_ANCESTOR.csv')
+        omop_concepts_df = pd.read_csv(omop_concepts_path, sep='\t')
+        omop_hierarchy_df = pd.read_csv(omop_hierarchy_path, sep='\t')
 
     # Construct: concepts
     hapi_concepts_df = omop_concepts_df[['concept_id', 'concept_name']]
@@ -204,8 +222,13 @@ def run(
 ) -> Dict[str, pd.DataFrame]:
     """Run"""
     # Massage params
-    omop_vocab_registry_path = os.path.join(in_dir, 'VOCABULARY.csv')
-    omop_vocab_registry_df = pd.read_csv(omop_vocab_registry_path, sep='\t')
+    try:
+        omop_vocab_registry_path = os.path.join(in_dir, 'VOCABULARY.csv')
+        omop_vocab_registry_df = pd.read_csv(omop_vocab_registry_path, sep='\t')
+    except FileNotFoundError:
+        omop_vocab_registry_path = os.path.join(in_dir, codesystem_name, 'VOCABULARY.csv')
+        omop_vocab_registry_df = pd.read_csv(omop_vocab_registry_path, sep='\t')
+
     if codesystem_version == DEFAULTS['codesystem-version']:
         # try to ascertain
         omop_vocab_registry_df = omop_vocab_registry_df[omop_vocab_registry_df['vocabulary_id'] == codesystem_name]
