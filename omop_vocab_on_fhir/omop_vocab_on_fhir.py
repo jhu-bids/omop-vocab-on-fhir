@@ -60,11 +60,19 @@ def _gen_json(
     server_url = server_url if server_url.endswith('/') else server_url + '/'
     codesystem_url = server_url if server_url.endswith('CodeSystem') else server_url + 'CodeSystem/'
     outpath = os.path.join(out_dir, f'{codesystem_name}-{codesystem_version}.json')
+    if out_format == 'fhir-json-extended':
+        outpath = outpath.replace('.json', '-extended.json')
     # todo: later: handle: DtypeWarning: Columns (6,9) have mixed types. Specify dtype option on import or set
     #  low_memory=False. concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep)
-    relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
-    concept_relationship_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT_RELATIONSHIP.csv'), sep=sep).fillna('')
-    concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep).fillna('')
+    try:
+        relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
+        concept_relationship_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT_RELATIONSHIP.csv'), sep=sep).fillna('')
+        concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep).fillna('')
+    except FileNotFoundError:
+        in_dir = os.path.join(in_dir, codesystem_name)
+        relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
+        concept_relationship_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT_RELATIONSHIP.csv'), sep=sep).fillna('')
+        concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep).fillna('')
 
     # 1. Construct top level CodeSystem JSON (excluding concept/ tree field)
     d = {  # todo: Is this thorough enough?
@@ -95,22 +103,24 @@ def _gen_json(
 
     # 2. Parse: RELATIONSHIP.csv: put in CodeSystem.property
     # https://build.fhir.org/codesystem-concept-property-type.html
-    for _index, row in relationship_df.iterrows():
-        # noinspection PyTypeChecker
-        prop = {
-            "code": row["relationship_id"],
-            "type": "code",
-            # "uri": "",  # todo?
-        }
-        if out_format == 'fhir-json-extended':
-            d["description"] = json.dumps(dict(row))  # are there better descriptions avail?
-        d["property"].append(prop)
+    # for _index, row in relationship_df.iterrows():
+    #     # noinspection PyTypeChecker
+    #     prop = {
+    #         "code": row["relationship_id"],
+    #         "type": "code",
+    #         # "uri": "",  # todo?
+    #     }
+    #     if out_format == 'fhir-json-extended':
+    #         prop["description"] = json.dumps(dict(row))  # are there better descriptions avail?
+    #     d["property"].append(prop)
 
     # 3. Parse: CONCEPT.csv: put in CodeSystem.concept
     # https://build.fhir.org/codesystem.html#CodeSystem.concept
     # todo: anywhere to put these fields other than definition?: "['domain_id', 'vocabulary_id',
     #  'concept_class_id', 'standard_concept', 'concept_code', 'valid_start_date', 'valid_end_date', 'invalid_reason']"
     for _index, row in concept_df.iterrows():
+        if str(row['concept_id']) != '756331':
+            continue  # TODO
         concept = {
             "code": row['concept_id'],
             "display": row['concept_name'],
@@ -125,10 +135,13 @@ def _gen_json(
         # todo: definition: not a better definition? or use a subset of these fields?
         if out_format == 'fhir-json-extended':
             concept["definition"] = json.dumps(dict(row))
+        # TODO temp
         concept_dict[row['concept_id']] = concept
 
     # 4. Parse: CONCEPT_RELATIONSHIP.csv: put in CodeSystem.concept
     for _index, row in concept_relationship_df.iterrows():
+        if str(row['concept_id_1']) != '756331':
+            continue  # TODO
         if 'property' not in concept_dict[row['concept_id_1']]:
             concept_dict[row['concept_id_1']]['property'] = []
         concept_dict[row['concept_id_1']]['property'].append({
@@ -150,10 +163,17 @@ def _gen_hapi_csv(
 ) -> Dict[str, pd.DataFrame]:
     """Create custom HAPI FHIR CodeSystem CSV."""
     #  ...i don't want IDE to show error for unused var here. Better solution avail?
-    omop_concepts_path = os.path.join(in_dir, 'CONCEPT.csv')
-    omop_hierarchy_path = os.path.join(in_dir, 'CONCEPT_ANCESTOR.csv')
-    omop_concepts_df = pd.read_csv(omop_concepts_path, sep='\t')
-    omop_hierarchy_df = pd.read_csv(omop_hierarchy_path, sep='\t')
+    try:
+        omop_concepts_path = os.path.join(in_dir, 'CONCEPT.csv')
+        omop_hierarchy_path = os.path.join(in_dir, 'CONCEPT_ANCESTOR.csv')
+        omop_concepts_df = pd.read_csv(omop_concepts_path, sep='\t')
+        omop_hierarchy_df = pd.read_csv(omop_hierarchy_path, sep='\t')
+    except FileNotFoundError:
+        in_dir = os.path.join(in_dir, codesystem_name)
+        omop_concepts_path = os.path.join(in_dir, 'CONCEPT.csv')
+        omop_hierarchy_path = os.path.join(in_dir, 'CONCEPT_ANCESTOR.csv')
+        omop_concepts_df = pd.read_csv(omop_concepts_path, sep='\t')
+        omop_hierarchy_df = pd.read_csv(omop_hierarchy_path, sep='\t')
 
     # Construct: concepts
     hapi_concepts_df = omop_concepts_df[['concept_id', 'concept_name']]
@@ -204,8 +224,13 @@ def run(
 ) -> Dict[str, pd.DataFrame]:
     """Run"""
     # Massage params
-    omop_vocab_registry_path = os.path.join(in_dir, 'VOCABULARY.csv')
-    omop_vocab_registry_df = pd.read_csv(omop_vocab_registry_path, sep='\t')
+    try:
+        omop_vocab_registry_path = os.path.join(in_dir, 'VOCABULARY.csv')
+        omop_vocab_registry_df = pd.read_csv(omop_vocab_registry_path, sep='\t')
+    except FileNotFoundError:
+        omop_vocab_registry_path = os.path.join(in_dir, codesystem_name, 'VOCABULARY.csv')
+        omop_vocab_registry_df = pd.read_csv(omop_vocab_registry_path, sep='\t')
+
     if codesystem_version == DEFAULTS['codesystem-version']:
         # try to ascertain
         omop_vocab_registry_df = omop_vocab_registry_df[omop_vocab_registry_df['vocabulary_id'] == codesystem_name]
