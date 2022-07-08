@@ -1,11 +1,17 @@
 """OMOP2FHIR for CodeSystem
 
 TODO's
+  - CPT4: Require a valid API key. this can be inferred by successfully running the .jar from OMOP,
+    though it took me ~10 minutes to finish, so would be better if it canceled the process early and read stdin
+    and then from that can infer if it successfully started (aka valid key).
+  - Make .run/ configs for every voc (1: copy paste files, 2: find/replace CPT4 -> <VOC>)
+    can tell which ones needed because they still have zip files.
   - time how long it takes
   - add option to dump json for concept.definition and property.description
   - What if it can't find version and version isn't passed?
   - Add --all-single-codesystem
   - Add --all-codesystems (if no -f, do all formats, else just that format)
+  - todo: later #1: (see where referenced below)
 Later areas for improvement
   1. Accept params from CLI
   2. Pre-bake common vocabularies, such as RxNorm. (what else is available and useful in OMOP?)
@@ -24,7 +30,7 @@ import os
 import zipfile
 from argparse import ArgumentParser
 from datetime import datetime
-from typing import Dict
+from typing import Dict, List
 
 import pandas as pd
 
@@ -64,7 +70,7 @@ def _gen_json(
     outpath = os.path.join(out_dir, f'{codesystem_name}-{codesystem_version}.json')
     if out_format == 'fhir-json-extended':
         outpath = outpath.replace('.json', '-extended.json')
-    # todo: later: handle: DtypeWarning: Columns (6,9) have mixed types. Specify dtype option on import or set
+    # todo: later #1: handle: DtypeWarning: Columns (6,9) have mixed types. Specify dtype option on import or set
     #  low_memory=False. concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep)
     try:
         relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
@@ -218,7 +224,7 @@ def _gen_hapi_csv(
 def run(
     codesystem_name: str, in_dir: str = DEFAULTS['in-dir'], out_dir: str = DEFAULTS['out-dir'],
     out_format: str = DEFAULTS['out-format'], server_url: str = DEFAULTS['server-url'],
-    upload: bool = DEFAULTS['upload'], codesystem_version: str = DEFAULTS['codesystem-version']
+    upload: bool = DEFAULTS['upload'], codesystem_version: str = DEFAULTS['codesystem-version'],
 ) -> Dict[str, pd.DataFrame]:
     """Run"""
     # Massage params
@@ -254,6 +260,36 @@ def run(
     return output
 
 
+def run_all():
+    """Run all code systems based on config.tsv"""
+    config_path = os.path.join(DATA_DIR, 'config.tsv')
+    df = pd.read_csv(config_path, sep='\t')
+    df = df[df['done'] == False]
+    run_configs: List[Dict] = []
+    for _index, row in df.iterrows():
+        # TODO: skipping -extended for now
+        if row['format'] == 'fhir-json-extended':
+            continue
+        run_configs.append({
+            'codesystem_name': row['vocabulary'],
+            'out_format': row['format'],
+        })
+    for d in run_configs:
+        print(f'Converting {d["codesystem_name"]} to {d["out_format"]}.')
+        t0 = datetime.now()
+        run(**d)
+        t1 = datetime.now()
+        # TODO: Update the CSV as each vocab/format combo is done.
+        # todo: update somehow by index of this?
+        # df_i = df[df['vocabulary'] == d['codesystem_name'] & df['out_format'] == d['format']]
+        # todo or can I assign an eq statement like?
+        # df[df['vocabulary'] == d['codesystem_name'] & df['out_format'] == d['format']]['done'] = TRUE?
+        # then:
+        # pd.to_csv(config_path, index=False, sep='\t')
+        print(f'Completed after {(t1 - t0).seconds} seconds.')
+        print()
+
+
 def cli_get_parser() -> ArgumentParser:
     """Add required fields to parser."""
     package_description = \
@@ -262,7 +298,6 @@ def cli_get_parser() -> ArgumentParser:
 
     parser.add_argument(
         '-n', '--codesystem-name',
-        required=True,
         help='The name of the code system, e.g. RxNorm, CPT4, etc. Required.')
     parser.add_argument(
         '-v', '--codesystem-version',
@@ -291,6 +326,10 @@ def cli_get_parser() -> ArgumentParser:
         '-u', '--upload',
         action='store_true',
         help='If passed, will attempt to upload at the `--server-url` passed.')
+    parser.add_argument(
+        '-a', '--all-codesystems',
+        action='store_true',
+        help='If passed, will check data/config.tsv and convert based on that.')
 
     return parser
 
@@ -298,6 +337,8 @@ def cli_get_parser() -> ArgumentParser:
 # todo: upload: should turn to false if server_url is default, and print warning
 def cli_validate(d: Dict) -> Dict:
     """Validate CLI args. Also updates these args if/as necessary"""
+    if not d['codesystem_name']:
+        raise RuntimeError('--codesystem-name is required')
     return d
 
 
@@ -306,8 +347,12 @@ def cli() -> Dict[str, pd.DataFrame]:
     parser = cli_get_parser()
     kwargs = parser.parse_args()
     kwargs_dict: Dict = vars(kwargs)
-    kwargs_dict = cli_validate(kwargs_dict)
-    return run(**kwargs_dict)
+
+    if kwargs_dict['all_codesystems'] == True:
+        run_all()
+    else:
+        kwargs_dict = cli_validate(kwargs_dict)
+        return run(**kwargs_dict)
 
 
 # Execution

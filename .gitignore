@@ -31,3 +31,4 @@ junk
 *.ipynb
 data/*
 !data/.keep
+/.run/
