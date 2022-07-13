@@ -56,10 +56,10 @@ def _gen_json(
     # Vars
     concept_dict = {}
     sep = '\t'
-    _id = f'{codesystem_name}-{codesystem_version}'
+    _id = f'{codesystem_name}-{codesystem_version}'.replace(' ', '.').replace('\t', '.')
     server_url = server_url if server_url.endswith('/') else server_url + '/'
     codesystem_url = server_url if server_url.endswith('CodeSystem') else server_url + 'CodeSystem/'
-    outpath = os.path.join(out_dir, f'{codesystem_name}-{codesystem_version}.json')
+    outpath = os.path.join(out_dir, f'CodeSystem-{_id}.json')
     # todo: later: handle: DtypeWarning: Columns (6,9) have mixed types. Specify dtype option on import or set
     #  low_memory=False. concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep)
     relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
