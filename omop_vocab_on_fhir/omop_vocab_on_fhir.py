@@ -64,7 +64,7 @@ def _gen_json(
     # Vars
     concept_dict = {}
     sep = '\t'
-    _id = f'{codesystem_name}-{codesystem_version}'
+    _id = f'{codesystem_name}-{codesystem_version}'.replace(' ', '.').replace('\t', '.')
     server_url = server_url if server_url.endswith('/') else server_url + '/'
     codesystem_url = server_url if server_url.endswith('CodeSystem') else server_url + 'CodeSystem/'
     outpath = os.path.join(out_dir, f'{codesystem_name}-{codesystem_version}.json')
