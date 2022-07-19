@@ -232,6 +232,7 @@ def run(
     codesystem_name: str, in_dir: str = DEFAULTS['in-dir'], out_dir: str = DEFAULTS['out-dir'],
     out_format: str = DEFAULTS['out-format'], server_url: str = DEFAULTS['server-url'],
     upload: bool = DEFAULTS['upload'], codesystem_version: str = DEFAULTS['codesystem-version'],
+    omop_version: str = DEFAULTS['omop-version'],
 ) -> Dict[str, pd.DataFrame]:
     """Run"""
     # Massage params
