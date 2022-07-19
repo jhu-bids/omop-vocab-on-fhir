@@ -32,3 +32,4 @@ junk
 data/*
 !data/.keep
 /.run/
+/output/

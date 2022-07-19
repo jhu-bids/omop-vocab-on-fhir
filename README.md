@@ -107,12 +107,12 @@ Run: `python -m omop_vocab_on_fhir <PARAMS>`
 CLI Params
 |Short flag | Long flag | Choices | Default | Description |
 |---	|---	|---	|--- | --- |
-| `-n` | `--codesystem-name` |  |  | The name of the code system, e.g. RxNorm, CPT4, etc. Required. |
-| `-vc` | `--codesystem-version` | | `'unknown-version'` | The version of the native code system / vocabulary. This can be found by looking up the code system's 'row within VOCABULARY.csv. |
-| `-vo` | `--omop-version` | | `5` | The OMOP version (integer) to support. Currently, only 5.0 is supported. |
-| `-i` | `--in-dir` | | The `data/` directory of the cloned repository. | The data where OMOP `.csv` files are stored. |
+| `-n` | `--codesystem-name` |  |  | The name of the code system, e.g. RxNorm, CPT4, etc. It is intended that the set of OMOP files being read (i.e. `CONCEPT.csv`, etc) pertain to a single code system. If that is not the case or if using `--all-codesystems`, leave blank. Otherwise this flag is required. |
+| `-vc` | `--codesystem-version` | | `'unknown-version'` | The version of the native code system / vocabulary. OMOP-Vocab-on-FHIR will try to find this by looking up the code system\'s row within VOCABULARY.csv. However, it will not always appear, so passing the version as CLI argument is useful if you happen to know it. |
+| `-vo` | `--omop-cdm-version` | | `5` | Optional. The OMOP CDM (Common Data Model) version to support, in integer form (e.g. 5 and not 5.x.y). Currently, only version 5 is supported, though it will try for other versions anyway. OMOP-Vocab-on-FHIR will find this by looking in VOCABULARY.csv where `vocabulary_id == "None"`. However, this CLI argument has been left here for edge cases where old versions may display the version in this way. |
+| `-i` | `--in-dir` | | The `data/` directory of the cloned repository. | The path where OMOP `.csv` files are stored. If using `--all-codesystems`, should be a directory containing subdirectories, where each subdirectory is a different code system with its corresponding OMOP `.csv` files. |
 | `-o` | `--out-dir` | | The cloned repository directory. | The directory where results should be saved. |
 | `-f` | `--out-format` | `['fhir-json', 'fhir-json-extended', 'fhir-hapi-csv']` | `'fhir-json'` | The format of the output to generate. |
 | `-s` | `--server-url` | | `'http://hl7.org/fhir/'` | Will show this within any JSON generated. Will also upload to this server if `--upload` is passed. This should be the "FHIR base URL". |
-| `-u` | `--upload` | | | If passed, will attempt to upload at the `--server-url` passed. |
+| `-a` | `--all-codesystems` | | | If passed, will use a `<in_dir>/config.csv` to orchestrate which vocabularies to convert and in what format(s). Must contain 2 columns: (1) `codesystem_name`, the names of which should match corresponding subfolder names in `<in_dir>`, and (2) `out_format`, the formats of which should be one of `<out_format>`. Can include (3) `done`, an optional boolean column for storing information about which `codesystem_name`/`out_format` combos have already been converted. If the value is `TRUE` for a given row, that `codesystem_name`/`out_format` combo will be skipped. |
 | `-h` | `--help` | | | Shows help information for using the tool. |

@@ -47,8 +47,8 @@ DEFAULTS = {
     'out-format': OUT_FORMAT_CHOICES[0],
     'server-url': 'http://hl7.org/fhir/',
     'upload': False,
-    'omop-version': 5,
-    'codesystem-version': 'unknown-version',  # only can ascertain if `codesystem_name` matches what's in VOCABULARY.csv
+    'omop-cdm-version': 'unknown-omop-cdm-version',
+    'codesystem-version': 'unknown-codesystem-version',  # can get if `codesystem_name` matches what's in VOCABULARY.csv
     # 'codesystem-name': '',  # seems no way to programmatically ascertain
 
 }
@@ -56,7 +56,7 @@ DEFAULTS = {
 
 # Functions
 def _gen_json(
-    in_dir: str, out_dir: str, out_format: str, codesystem_name: str, codesystem_version: str,
+    in_dir: str, out_dir: str, out_format: str, codesystem_name: str, codesystem_version: str, omop_cdm_version: str,
     server_url: str,
 ) -> Dict:
     """Create FHIR CodeSystem JSON.
@@ -69,20 +69,19 @@ def _gen_json(
     _id = f'{codesystem_name}-{codesystem_version}'.replace(' ', '.').replace('\t', '.')
     server_url = server_url if server_url.endswith('/') else server_url + '/'
     codesystem_url = server_url if server_url.endswith('CodeSystem') else server_url + 'CodeSystem/'
-    outpath = os.path.join(out_dir, f'{codesystem_name}-{codesystem_version}.json')
+    if omop_cdm_version != DEFAULTS['omop-cdm-version']:
+        omop_cdm_version = 'OMOP-CDM-' + omop_cdm_version
+    outpath = os.path.join(out_dir, f'{codesystem_name}-{codesystem_version}_{omop_cdm_version}.json')
     if out_format == 'fhir-json-extended':
         outpath = outpath.replace('.json', '-extended.json')
     # todo: later #1: handle: DtypeWarning: Columns (6,9) have mixed types. Specify dtype option on import or set
     #  low_memory=False. concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep)
-    try:
-        relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
-        concept_relationship_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT_RELATIONSHIP.csv'), sep=sep).fillna('')
-        concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep).fillna('')
-    except FileNotFoundError:
-        in_dir = os.path.join(in_dir, codesystem_name)
-        relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
-        concept_relationship_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT_RELATIONSHIP.csv'), sep=sep).fillna('')
-        concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep).fillna('')
+    #  pandas docs: dict of column -> type: Data type for data or columns. E.g. {‘a’: np.float64, ‘b’: np.int32, ‘c’:
+    #  ‘Int64’} Use str or object together with suitable na_values settings to preserve and not interpret dtype.
+    #  If converters are specified, they will be applied INSTEAD of dtype conversion.
+    relationship_df = pd.read_csv(os.path.join(in_dir, 'RELATIONSHIP.csv'), sep=sep).fillna('')
+    concept_relationship_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT_RELATIONSHIP.csv'), sep=sep).fillna('')
+    concept_df = pd.read_csv(os.path.join(in_dir, 'CONCEPT.csv'), sep=sep).fillna('')
 
     # 1. Construct top level CodeSystem JSON (excluding concept/ tree field)
     d = {  # todo: Is this thorough enough?
@@ -170,21 +169,14 @@ def _gen_json(
 
 
 def _gen_hapi_csv(
-    in_dir: str, out_dir: str, codesystem_name: str, codesystem_version: str
+    in_dir: str, out_dir: str, codesystem_name: str, codesystem_version: str, omop_cdm_version: str
 ) -> Dict[str, pd.DataFrame]:
     """Create custom HAPI FHIR CodeSystem CSV."""
     #  ...i don't want IDE to show error for unused var here. Better solution avail?
-    try:
-        omop_concepts_path = os.path.join(in_dir, 'CONCEPT.csv')
-        omop_hierarchy_path = os.path.join(in_dir, 'CONCEPT_ANCESTOR.csv')
-        omop_concepts_df = pd.read_csv(omop_concepts_path, sep='\t')
-        omop_hierarchy_df = pd.read_csv(omop_hierarchy_path, sep='\t')
-    except FileNotFoundError:
-        in_dir = os.path.join(in_dir, codesystem_name)
-        omop_concepts_path = os.path.join(in_dir, 'CONCEPT.csv')
-        omop_hierarchy_path = os.path.join(in_dir, 'CONCEPT_ANCESTOR.csv')
-        omop_concepts_df = pd.read_csv(omop_concepts_path, sep='\t')
-        omop_hierarchy_df = pd.read_csv(omop_hierarchy_path, sep='\t')
+    omop_concepts_path = os.path.join(in_dir, 'CONCEPT.csv')
+    omop_hierarchy_path = os.path.join(in_dir, 'CONCEPT_ANCESTOR.csv')
+    omop_concepts_df = pd.read_csv(omop_concepts_path, sep='\t')
+    omop_hierarchy_df = pd.read_csv(omop_hierarchy_path, sep='\t')
 
     # Construct: concepts
     hapi_concepts_df = omop_concepts_df[['concept_id', 'concept_name']]
@@ -210,10 +202,16 @@ def _gen_hapi_csv(
     hapi_concepts_df.to_csv(hapi_concepts_path, index=False)
     hapi_hierarchy_df.to_csv(hapi_hierarchy_path, index=False)
 
-    archive_name = 'hapi_fhir_codesystem_csv.zip'
+    archive_name = 'HAPI-FHIR-CodeSystem-CSVs.zip'
     if codesystem_name:
-        codesystem_version = codesystem_version + '_' if codesystem_version else ''
-        archive_name = f'{codesystem_name}_{codesystem_version}hapi_csv.zip'
+        codesystem_name = codesystem_name + '_'
+        codesystem_version = codesystem_version + '_'
+    else:
+        codesystem_name = ''
+        codesystem_version = ''
+    if omop_cdm_version != DEFAULTS['omop-cdm-version']:
+        omop_cdm_version = 'OMOP-CDM-' + omop_cdm_version
+    archive_name = f'{codesystem_name}{codesystem_version}{omop_cdm_version}-{archive_name}'
     with zipfile.ZipFile(os.path.join(PROJECT_DIR, archive_name), 'w') as arch:
         for path in hapi_paths:
             filename = os.path.basename(path)
@@ -232,16 +230,10 @@ def run(
     codesystem_name: str, in_dir: str = DEFAULTS['in-dir'], out_dir: str = DEFAULTS['out-dir'],
     out_format: str = DEFAULTS['out-format'], server_url: str = DEFAULTS['server-url'],
     upload: bool = DEFAULTS['upload'], codesystem_version: str = DEFAULTS['codesystem-version'],
-    omop_version: str = DEFAULTS['omop-version'],
+    omop_cdm_version: str = DEFAULTS['omop-cdm-version'],
 ) -> Dict[str, pd.DataFrame]:
     """Run"""
-    # Massage params
-    try:
-        omop_vocab_registry_path = os.path.join(in_dir, 'VOCABULARY.csv')
-        omop_vocab_registry_df = pd.read_csv(omop_vocab_registry_path, sep='\t')
-    except FileNotFoundError:
-        omop_vocab_registry_path = os.path.join(in_dir, codesystem_name, 'VOCABULARY.csv')
-        omop_vocab_registry_df = pd.read_csv(omop_vocab_registry_path, sep='\t')
+    omop_vocab_registry_df = pd.read_csv(os.path.join(in_dir, 'VOCABULARY.csv'), sep='\t')
 
     if codesystem_version == DEFAULTS['codesystem-version']:
         # try to ascertain
@@ -255,32 +247,33 @@ def run(
     if out_format in ['fhir-json', 'fhir-json-extended']:
         output: Dict = _gen_json(
             in_dir=in_dir, out_dir=out_dir, out_format=out_format, codesystem_name=codesystem_name,
-            codesystem_version=codesystem_version, server_url=server_url)
+            codesystem_version=codesystem_version, omop_cdm_version=omop_cdm_version, server_url=server_url)
     else:  # 'fhir-hapi-csv'
         output: Dict = _gen_hapi_csv(
-            in_dir=in_dir, out_dir=out_dir, codesystem_name=codesystem_name, codesystem_version=codesystem_version)
+            in_dir=in_dir, out_dir=out_dir, codesystem_name=codesystem_name, codesystem_version=codesystem_version,
+            omop_cdm_version=omop_cdm_version)
 
-    # todo: upload to server
+    # todo: add feature: upload to server
     #  - POST not possible for hapi csv from outside server. throw warn for that
     if upload:
-        print()
+        print('Warning: Upload feature not yet supported. Skipping this step.', file=sys.stderr)
 
     return output
 
 
 def run_all():
     """Run all code systems based on config.tsv"""
-    config_path = os.path.join(DATA_DIR, 'config.tsv')
-    df = pd.read_csv(config_path, sep='\t')
-    df = df[df['done'] == False]
+    config_path = os.path.join(DATA_DIR, 'config.csv')
+    df = pd.read_csv(config_path)
+    if len(list(df.columns)) == 1:  # likely means tab-separated
+        df = pd.read_csv(config_path, sep='\t')
+    if 'done' in list(df.columns):
+        df = df[df['done'] != True]
     run_configs: List[Dict] = []
     for _index, row in df.iterrows():
-        # TODO: skipping -extended for now
-        if row['format'] == 'fhir-json-extended':
-            continue
         run_configs.append({
-            'codesystem_name': row['vocabulary'],
-            'out_format': row['format'],
+            'codesystem_name': row['codesystem_name'],
+            'out_format': row['out_format'],
         })
     for d in run_configs:
         print(f'Converting {d["codesystem_name"]} to {d["out_format"]}.')
@@ -306,21 +299,29 @@ def cli_get_parser() -> ArgumentParser:
 
     parser.add_argument(
         '-n', '--codesystem-name',
-        help='The name of the code system, e.g. RxNorm, CPT4, etc. Required.')
+        help='The name of the code system, e.g. RxNorm, CPT4, etc. It is intended that the set of OMOP files being read'
+             ' (i.e. `CONCEPT.csv`, etc) pertain to a single code system. If that is not the case or if using '
+             '`--all-codesystems`, leave blank. Otherwise this flag is required.')
     parser.add_argument(
         '-vc', '--codesystem-version',
         default=DEFAULTS['codesystem-version'],
-        help='The version of the native code system / vocabulary. This can be found by looking up the code system\'s '
-             'row within VOCABULARY.csv.')
+        help='The version of the native code system / vocabulary. OMOP-Vocab-on-FHIR will try to find this by looking '
+             'up the code system\'s row within VOCABULARY.csv. However, it will not always appear, so passing the '
+             'version as CLI argument is useful if you happen to know it.')
     parser.add_argument(
-        '-vo', '--omop-version',
-        action='store_true',
-        default=DEFAULTS['omop-version'],
-        help='The OMOP version (integer) to support. Currently, only 5.0 is supported.')
+        '-vo', '--omop-cdm-version',
+        default=DEFAULTS['omop-cdm-version'],
+        help='Optional. The OMOP CDM (Common Data Model) version to support, in integer form (e.g. 5 and not 5.x.y). '
+             'Currently, only version 5 is officially supported, though it will try for other versions anyway. '
+             'OMOP-Vocab-on-FHIR will find this by looking in VOCABULARY.csv where `vocabulary_id == "None"`. '
+             'However, this CLI argument has been left here for edge cases where '
+             'old versions may display the version in this way.')
     parser.add_argument(
         '-i', '--in-dir',
         default=DEFAULTS['in-dir'],
-        help='The data where OMOP `.csv` files are stored.')
+        help='The path where OMOP `.csv` files are stored. If using `--all-codesystems`, should be a directory '
+             'containing subdirectories, where each subdirectory is a different code system with its corresponding OMOP'
+             ' `.csv` files.')
     parser.add_argument(
         '-o', '--out-dir',
         default=DEFAULTS['out-dir'],
@@ -335,25 +336,63 @@ def cli_get_parser() -> ArgumentParser:
         default=DEFAULTS['server-url'],
         help='Will show this within any JSON generated. Will also upload to this server if `--upload` is passed. This '
              'should be the "FHIR base URL".')
-    parser.add_argument(
-        '-u', '--upload',
-        action='store_true',
-        help='If passed, will attempt to upload at the `--server-url` passed.')
+    # todo: when/if added back, need to (i) add logic to do the upload, (ii) add a line back to the README table.
+    # parser.add_argument(
+    #     '-u', '--upload',
+    #     action='store_true',
+    #     help='If passed, will attempt to upload at the `--server-url` passed.')
     parser.add_argument(
         '-a', '--all-codesystems',
         action='store_true',
-        help='If passed, will check data/config.tsv and convert based on that.')
+        help=f'If passed, will use a `<in_dir>/config.csv` to orchestrate which vocabularies to convert and in what '
+             f'format(s). Must contain 2 columns: (1) `codesystem_name`, the names of which should match corresponding '
+             f'subfolder names in `<in_dir>`, and (2) `out_format`, the formats of which should be one of '
+             f'`{OUT_FORMAT_CHOICES}`. Can include (3) `done`, an optional boolean column for storing information about'
+             f' which `codesystem_name`/`out_format` combos have already been converted. If the value is `TRUE` for a '
+             f'given row, that `codesystem_name`/`out_format` combo will be skipped.')
 
     return parser
+
+
+def get_omopcdmversion_and_indir(in_dir: str, codesystem_name: str) -> (str, str):
+    """Get OMOP CDM Version"""
+    VOCAB_FILENAME = 'VOCABULARY.csv'
+    v = DEFAULTS['omop-cdm-version']
+
+    omop_vocab_registry_path = os.path.join(in_dir, VOCAB_FILENAME)
+    if not os.path.exists(omop_vocab_registry_path):  # try looking in subdir w/ codesystem's name
+        omop_vocab_registry_path = os.path.join(in_dir, codesystem_name, VOCAB_FILENAME)
+    if not os.path.exists(omop_vocab_registry_path):  # try lowercase
+        omop_vocab_registry_path = os.path.join(in_dir, codesystem_name.lower(), VOCAB_FILENAME)
+    if not os.path.exists(omop_vocab_registry_path):  # try uppercase
+        omop_vocab_registry_path = os.path.join(in_dir, codesystem_name.upper(), VOCAB_FILENAME)
+    if not os.path.exists(omop_vocab_registry_path):  # try title case
+        omop_vocab_registry_path = os.path.join(in_dir, codesystem_name.title(), VOCAB_FILENAME)
+    omop_vocab_registry_df = pd.read_csv(omop_vocab_registry_path, sep='\t').fillna('')  # will fail if still not found
+    # Update `in_dir` if it changed
+    in_dir = omop_vocab_registry_path.replace(VOCAB_FILENAME, '')
+
+    version_row: pd.DataFrame = omop_vocab_registry_df[omop_vocab_registry_df['vocabulary_id'] == 'None']
+    if len(version_row) == 1:
+        v: str = list(version_row['vocabulary_version'])[0]
+    return v, in_dir
 
 
 # todo: upload: should turn to false if server_url is default, and print warning
 def cli_validate(d: Dict) -> Dict:
     """Validate CLI args. Also updates these args if/as necessary"""
+    # codesystem_name
     if not d['codesystem_name']:
-        raise RuntimeError('--codesystem-name is required')
-    if d['omop_version'] != DEFAULTS['omop-version']:  # 5
-        raise NotImplementedError('Only OMOP version 5 is supported.')
+        raise RuntimeError('--codesystem-name is required unless using `--all-codesystems`.')
+
+    # omop_cdm_version & in_dir
+    d['omop_cdm_version'], d['in_dir'] = get_omopcdmversion_and_indir(
+        in_dir=d['in_dir'], codesystem_name=d['codesystem_name'])
+    if d['omop_cdm_version'] == DEFAULTS['omop-cdm-version']:
+        print('Could not identify OMOP CDM version.', file=sys.stderr)
+    if not any([d['omop_cdm_version'].startswith(x) for x in ['v5', '5']]):
+        print('Only OMOP CDM version 5 is officially supported. Trying anyway.', file=sys.stderr)
+
     return d
 
 
@@ -366,6 +405,7 @@ def cli() -> Dict[str, pd.DataFrame]:
     if kwargs_dict['all_codesystems'] == True:
         run_all()
     else:
+        del kwargs_dict['all_codesystems']
         kwargs_dict = cli_validate(kwargs_dict)
         return run(**kwargs_dict)
 
