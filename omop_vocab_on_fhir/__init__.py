@@ -1,1 +1,1 @@
-"""OMOP2FHIR for CodeSystem"""
+"""OMOP Vocab on FHIR"""

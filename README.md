@@ -108,7 +108,8 @@ CLI Params
 |Short flag | Long flag | Choices | Default | Description |
 |---	|---	|---	|--- | --- |
 | `-n` | `--codesystem-name` |  |  | The name of the code system, e.g. RxNorm, CPT4, etc. Required. |
-| `-v` | `--codesystem-version` | | `'unknown-version'` | The version of the code system. This can be found by looking up the code system's row within VOCABULARY.csv. |
+| `-vc` | `--codesystem-version` | | `'unknown-version'` | The version of the native code system / vocabulary. This can be found by looking up the code system's 'row within VOCABULARY.csv. |
+| `-vo` | `--omop-version` | | `5` | The OMOP version (integer) to support. Currently, only 5.0 is supported. |
 | `-i` | `--in-dir` | | The `data/` directory of the cloned repository. | The data where OMOP `.csv` files are stored. |
 | `-o` | `--out-dir` | | The cloned repository directory. | The directory where results should be saved. |
 | `-f` | `--out-format` | `['fhir-json', 'fhir-json-extended', 'fhir-hapi-csv']` | `'fhir-json'` | The format of the output to generate. |

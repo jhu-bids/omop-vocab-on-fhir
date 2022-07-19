@@ -27,6 +27,7 @@ Assumptions
 """
 import json
 import os
+import sys
 import zipfile
 from argparse import ArgumentParser
 from datetime import datetime
@@ -46,6 +47,7 @@ DEFAULTS = {
     'out-format': OUT_FORMAT_CHOICES[0],
     'server-url': 'http://hl7.org/fhir/',
     'upload': False,
+    'omop-version': 5,
     'codesystem-version': 'unknown-version',  # only can ascertain if `codesystem_name` matches what's in VOCABULARY.csv
     # 'codesystem-name': '',  # seems no way to programmatically ascertain
 
@@ -128,7 +130,7 @@ def _gen_json(
     #  'concept_class_id', 'standard_concept', 'concept_code', 'valid_start_date', 'valid_end_date', 'invalid_reason']"
     for _index, row in concept_df.iterrows():
         concept = {
-            "code": row['concept_id'],
+            "code": int(row['concept_id']),
             "display": row['concept_name'],
             # "designation": [{  # todo? example below
             #     "language": "en",
@@ -141,18 +143,23 @@ def _gen_json(
         # todo: definition: not a better definition? or use a subset of these fields?
         if out_format == 'fhir-json-extended':
             concept["definition"] = json.dumps(dict(row))
-        # TODO temp
-        concept_dict[row['concept_id']] = concept
+        # TODO: Need to have pandas DF use dtypes instead of casting to int() here and elsewhere
+        concept_dict[int(row['concept_id'])] = concept
 
     # 4. Parse: CONCEPT_RELATIONSHIP.csv: put in CodeSystem.concept
     for _index, row in concept_relationship_df.iterrows():
-        if 'property' not in concept_dict[row['concept_id_1']]:
-            concept_dict[row['concept_id_1']]['property'] = []
-        concept_dict[row['concept_id_1']]['property'].append({
-            "code": row["relationship_id"],
-            "valueCode": row["concept_id_2"]
-            # anywhere to put?: `valid_start_date`, `valid_end_date`, `invalid_reason`?
-        })
+        try:
+            if 'property' not in concept_dict[int(row['concept_id_1'])]:
+                concept_dict[int(row['concept_id_1'])]['property'] = []
+            concept_dict[int(row['concept_id_1'])]['property'].append({
+                "code": row["relationship_id"],
+                "valueCode": int(row["concept_id_2"])
+                # anywhere to put?: `valid_start_date`, `valid_end_date`, `invalid_reason`?
+            })
+        except KeyError:
+            print(f'Warning: Concept with id {row["concept_id_1"]} appeared in the `concept_id_1` column of '
+                  f'`CONCEPT_RELATIONSHIP.csv`, but was not found in `CONCEPT.csv`. This concept will thus be excluded.'
+                  , file=sys.stderr)
     d['concept'] = list(concept_dict.values())
 
     # Save
@@ -300,10 +307,15 @@ def cli_get_parser() -> ArgumentParser:
         '-n', '--codesystem-name',
         help='The name of the code system, e.g. RxNorm, CPT4, etc. Required.')
     parser.add_argument(
-        '-v', '--codesystem-version',
+        '-vc', '--codesystem-version',
         default=DEFAULTS['codesystem-version'],
-        help='The version of the code system. This can be found by looking up the code system\'s row within '
-             'VOCABULARY.csv.')
+        help='The version of the native code system / vocabulary. This can be found by looking up the code system\'s '
+             'row within VOCABULARY.csv.')
+    parser.add_argument(
+        '-vo', '--omop-version',
+        action='store_true',
+        default=DEFAULTS['omop-version'],
+        help='The OMOP version (integer) to support. Currently, only 5.0 is supported.')
     parser.add_argument(
         '-i', '--in-dir',
         default=DEFAULTS['in-dir'],
@@ -339,6 +351,8 @@ def cli_validate(d: Dict) -> Dict:
     """Validate CLI args. Also updates these args if/as necessary"""
     if not d['codesystem_name']:
         raise RuntimeError('--codesystem-name is required')
+    if d['omop_version'] != DEFAULTS['omop-version']:  # 5
+        raise NotImplementedError('Only OMOP version 5 is supported.')
     return d
 
 
